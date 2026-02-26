@@ -1,0 +1,31 @@
+name: ApplianceChecklist
+options:
+  bundleIdPrefix: com.appliancechecklist
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  ApplianceChecklist:
+    type: application
+    platform: iOS
+    sources:
+      - path: ApplianceChecklist
+        excludes:
+          - Info.plist
+    info:
+      path: ApplianceChecklist/Info.plist
+    settings:
+      base:
+        INFOPLIST_FILE: ApplianceChecklist/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.appliancechecklist.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    entitlements:
+      path: ApplianceChecklist/ApplianceChecklist.entitlements
