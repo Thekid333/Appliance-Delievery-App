@@ -20,18 +20,22 @@ class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterD
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .list]
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .list])
     }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         let info = response.notification.request.content.userInfo
-        guard let urlString = info["url"] as? String, let url = URL(string: urlString) else { return }
-        await MainActor.run { UIApplication.shared.open(url) }
+        if let urlString = info["url"] as? String, let url = URL(string: urlString) {
+            Task { @MainActor in UIApplication.shared.open(url) }
+        }
+        completionHandler()
     }
 
     // MARK: - Authorization

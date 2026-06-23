@@ -19,6 +19,9 @@
 		AA100100000000000000000E /* DriveTimeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200100000000000000000E /* DriveTimeService.swift */; };
 		AA100100000000000000000F /* LocationCompleterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA200100000000000000000F /* LocationCompleterService.swift */; };
 		AA1001000000000000000010 /* AddressFieldWithSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2001000000000000000010 /* AddressFieldWithSuggestions.swift */; };
+		AA1001000000000000000011 /* Listing.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2001000000000000000011 /* Listing.swift */; };
+		AA1001000000000000000012 /* ListingsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2001000000000000000012 /* ListingsService.swift */; };
+		AA1001000000000000000013 /* SnipeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2001000000000000000013 /* SnipeView.swift */; };
 		AA100100000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA200100000000000000000B /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -35,6 +38,9 @@
 		AA200100000000000000000E /* DriveTimeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTimeService.swift; sourceTree = "<group>"; };
 		AA200100000000000000000F /* LocationCompleterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCompleterService.swift; sourceTree = "<group>"; };
 		AA2001000000000000000010 /* AddressFieldWithSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddressFieldWithSuggestions.swift; sourceTree = "<group>"; };
+		AA2001000000000000000011 /* Listing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Listing.swift; sourceTree = "<group>"; };
+		AA2001000000000000000012 /* ListingsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListingsService.swift; sourceTree = "<group>"; };
+		AA2001000000000000000013 /* SnipeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipeView.swift; sourceTree = "<group>"; };
 		AA200100000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA200100000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA200100000000000000000C /* ApplianceChecklist.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ApplianceChecklist.entitlements; sourceTree = "<group>"; };
@@ -79,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				AA2001000000000000000002 /* Job.swift */,
+				AA2001000000000000000011 /* Listing.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -90,6 +97,7 @@
 				AA2001000000000000000005 /* NotificationService.swift */,
 				AA200100000000000000000E /* DriveTimeService.swift */,
 				AA200100000000000000000F /* LocationCompleterService.swift */,
+				AA2001000000000000000012 /* ListingsService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -102,6 +110,7 @@
 				AA2001000000000000000010 /* AddressFieldWithSuggestions.swift */,
 				AA2001000000000000000008 /* JobDetailView.swift */,
 				AA2001000000000000000009 /* ChecklistView.swift */,
+				AA2001000000000000000013 /* SnipeView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -203,6 +212,9 @@
 				AA100100000000000000000E /* DriveTimeService.swift in Sources */,
 				AA100100000000000000000F /* LocationCompleterService.swift in Sources */,
 				AA1001000000000000000010 /* AddressFieldWithSuggestions.swift in Sources */,
+				AA1001000000000000000011 /* Listing.swift in Sources */,
+				AA1001000000000000000012 /* ListingsService.swift in Sources */,
+				AA1001000000000000000013 /* SnipeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -23,9 +23,9 @@ struct ApplianceChecklistApp: App {
                     // Make sure a background banger-check is queued.
                     listingsService.scheduleBackgroundRefresh()
                 }
-                .onChange(of: scenePhase) { _, phase in
+                .onChange(of: scenePhase) {
                     // Re-queue a background refresh whenever we leave the foreground.
-                    if phase == .background {
+                    if scenePhase == .background {
                         listingsService.scheduleBackgroundRefresh()
                     }
                 }
