@@ -3,8 +3,11 @@ import SwiftData
 
 struct JobListView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var listingsService: ListingsService
+    @EnvironmentObject private var driveTimeService: DriveTimeService
     @Query(sort: \Job.scheduledDate, order: .forward) private var jobs: [Job]
     @State private var showingAddJob = false
+    @State private var showingSnipeSettings = false
     @State private var selectedTab = 0
 
     private var upcomingAndInProgressJobs: [Job] {
@@ -25,24 +28,59 @@ struct JobListView: View {
                 // Tab 2: Completed
                 completedTab
                     .tag(1)
+
+                // Tab 3: Snipe (scraped Marketplace listings)
+                SnipeView(showingSettings: $showingSnipeSettings)
+                    .tag(2)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .overlay(alignment: .bottom) {
                 tabBar
             }
-            .navigationTitle(selectedTab == 0 ? "Upcoming" : "Completed")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingAddJob = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                    }
-                }
-            }
+            .navigationTitle(navigationTitle)
+            .toolbar { toolbarContent }
             .sheet(isPresented: $showingAddJob) {
                 AddEditJobView()
+            }
+            .sheet(isPresented: $showingSnipeSettings) {
+                SnipeSettingsView()
+            }
+        }
+    }
+
+    private var navigationTitle: String {
+        switch selectedTab {
+        case 0: return "Upcoming"
+        case 1: return "Completed"
+        default: return "Snipe"
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if selectedTab < 2 {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingAddJob = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                }
+            }
+        } else {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showingSnipeSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await listingsService.refresh(homeAddress: driveTimeService.homeAddress) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
             }
         }
     }
@@ -53,11 +91,12 @@ struct JobListView: View {
         HStack(spacing: 0) {
             tabButton(title: "Upcoming", icon: "clock", tag: 0)
             tabButton(title: "Completed", icon: "checkmark.circle", tag: 1)
+            tabButton(title: "Snipe", icon: "scope", tag: 2)
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 40)
+        .padding(.horizontal, 20)
         .padding(.bottom, 8)
     }
 
@@ -297,4 +336,5 @@ struct JobRowView: View {
         .environmentObject(CalendarService())
         .environmentObject(NotificationService())
         .environmentObject(DriveTimeService())
+        .environmentObject(ListingsService())
 }

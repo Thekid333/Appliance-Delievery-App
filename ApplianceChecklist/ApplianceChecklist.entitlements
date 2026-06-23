@@ -2,5 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Optional: enable "Time Sensitive Notifications" capability + uncomment to let
+	     banger alerts break through Focus / Do Not Disturb. Works at normal priority without it.
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+	-->
 </dict>
 </plist>

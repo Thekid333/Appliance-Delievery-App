@@ -1,6 +1,28 @@
 ## Appliance Checklist App
 
-An iOS app for planning appliance delivery, installation, and pickup jobs with smart timing, checklists, and calendar + notification integration.
+An iOS app for planning appliance delivery, installation, and pickup jobs with smart timing, checklists, and calendar + notification integration — **plus a Snipe tab** that surfaces scraped Facebook Marketplace listings ranked for fast buying.
+
+---
+
+## Snipe Tab (Marketplace Listings)
+
+A third tab, **Snipe**, shows listings scraped by the companion
+[Facebook Market Scanner](../Facebook-Market-Scanner) (running on your PC), so you can
+buy fast without ever checking email.
+
+- **Live feed from a GitHub Gist** — the scraper publishes `listings.json`; the app
+  fetches it from anywhere (free, no server). Auto-refreshes + pull-to-refresh.
+- **Ranking built for sniping:** sort by **Newest**, **Closest**, **Cheapest**, or
+  **Best deal** (asking price + round-trip fuel).
+- **Distance & cost from home:** each listing's city is geocoded against your saved home
+  address; cost = round-trip miles × **$0.69/mi** (4WD).
+- **One-tap to Facebook:** tapping a listing opens it **directly in the Facebook app** if
+  installed (falls back to Safari).
+- **Banger alerts 🔥:** opt-in push notifications when a fresh listing matches your
+  keywords and price/distance limits — even when the app is closed (best-effort iOS
+  background refresh). De-duped, and tapping the alert jumps straight into the listing.
+- **Setup:** open the Snipe tab → gear icon → paste your **Gist ID**, set your **home
+  address**, and configure alerts. See [`../SNIPE_SETUP.md`](../SNIPE_SETUP.md) for the full guide.
 
 ---
 

@@ -41,6 +41,16 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>comgooglemaps</string>
+		<string>fb</string>
+		<string>fbapi</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.appliancechecklist.snipe.refresh</string>
 	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>This app needs access to your calendar to create and manage job events, departure times, and prep reminders.</string>

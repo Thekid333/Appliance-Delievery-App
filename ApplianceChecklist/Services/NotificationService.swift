@@ -1,12 +1,38 @@
 import UserNotifications
 import SwiftUI
+import UIKit
 
-/// Manages local notifications for job prep reminders, departure alerts, and post-tinkering reminders.
+/// Manages local notifications for job reminders and Snipe "banger" alerts.
+/// Also acts as the notification-center delegate so banners appear in the foreground
+/// and tapping a banger alert opens the listing.
 @MainActor
-class NotificationService: ObservableObject {
+class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
 
     @Published var isAuthorized = false
     @Published var lastError: String?
+
+    override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    // MARK: - Delegate (foreground presentation + tap handling)
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let info = response.notification.request.content.userInfo
+        guard let urlString = info["url"] as? String, let url = URL(string: urlString) else { return }
+        await MainActor.run { UIApplication.shared.open(url) }
+    }
 
     // MARK: - Authorization
 
