@@ -297,8 +297,8 @@ final class ListingsService: ObservableObject {
     private func isBanger(_ item: RankedListing) -> Bool {
         let listing = item.listing
 
-        // Freshness backstop: never alert on something first seen more than a day ago.
-        if let seen = listing.firstSeenDate, Date().timeIntervalSince(seen) > 24 * 3600 {
+        // Freshness backstop: never alert on something listed more than a day ago.
+        if let seen = listing.displayDate, Date().timeIntervalSince(seen) > 24 * 3600 {
             return false
         }
 

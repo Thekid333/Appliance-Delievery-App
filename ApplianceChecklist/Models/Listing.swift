@@ -33,27 +33,32 @@ struct Listing: Decodable, Identifiable, Hashable {
     let category: String?
     /// ISO-8601 string stamped by the scraper when the item was first seen.
     let firstSeen: String?
+    /// ISO-8601 string for when the item was actually posted on Facebook, read
+    /// from the item's own page by the scraper. May be nil for older records.
+    let listedAt: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, price, location, image, link, url, category
         case priceValue = "price_value"
         case scrapedDistanceMiles = "distance_miles"
         case firstSeen = "first_seen"
+        case listedAt = "listed_at"
     }
 
     // MARK: Derived
 
     var firstSeenDate: Date? { Listing.parseDate(firstSeen) }
+    var listedDate: Date? { Listing.parseDate(listedAt) }
 
-    /// Best URL to hand to the Facebook app / Safari.
+    /// When the listing was posted if we know it, otherwise when we first saw it.
+    /// Drives the time label, NEW badge, and "Newest" sort.
+    var displayDate: Date? { listedDate ?? firstSeenDate }
+
+    /// Canonical URL for the item. Built from the id so it's free of the search
+    /// tracking params, and routes straight into the Facebook app via Universal
+    /// Links when it's installed (else Safari).
     var marketplaceURL: URL? {
-        if let url, let u = URL(string: url) { return u }
-        return URL(string: "https://www.facebook.com/marketplace/item/\(id)")
-    }
-
-    /// Deep link that opens the item directly inside the Facebook app, if installed.
-    var facebookAppURL: URL? {
-        URL(string: "fb://marketplace/item/\(id)")
+        URL(string: "https://www.facebook.com/marketplace/item/\(id)")
     }
 
     var imageURL: URL? {
@@ -61,9 +66,9 @@ struct Listing: Decodable, Identifiable, Hashable {
         return URL(string: image)
     }
 
-    /// "2h ago", "just now", etc.
+    /// "2h ago", "just now", etc. — based on when it was listed when known.
     var timeAgo: String {
-        guard let date = firstSeenDate else { return "" }
+        guard let date = displayDate else { return "" }
         let seconds = Date().timeIntervalSince(date)
         if seconds < 60 { return "just now" }
         let minutes = Int(seconds / 60)
@@ -73,9 +78,9 @@ struct Listing: Decodable, Identifiable, Hashable {
         return "\(hours / 24)d ago"
     }
 
-    /// Considered "fresh" (worth a NEW badge) if first seen within the last hour.
+    /// Considered "fresh" (worth a NEW badge) if listed within the last hour.
     var isFresh: Bool {
-        guard let date = firstSeenDate else { return false }
+        guard let date = displayDate else { return false }
         return Date().timeIntervalSince(date) < 3600
     }
 

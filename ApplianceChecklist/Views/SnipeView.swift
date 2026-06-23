@@ -39,7 +39,7 @@ struct SnipeView: View {
 
         switch sort {
         case .newest:
-            items.sort { ($0.listing.firstSeenDate ?? .distantPast) > ($1.listing.firstSeenDate ?? .distantPast) }
+            items.sort { ($0.listing.displayDate ?? .distantPast) > ($1.listing.displayDate ?? .distantPast) }
         case .closest:
             items.sort { sortAscending($0.straightLineMiles, $1.straightLineMiles) }
         case .cheapest:
@@ -194,18 +194,11 @@ struct SnipeView: View {
         }
     }
 
-    /// Open the listing in the Facebook app if installed, otherwise in Safari.
+    /// Open the listing. The canonical marketplace URL is a Universal Link, so
+    /// iOS routes it into the Facebook app when installed, otherwise Safari.
     private func openInFacebook(_ listing: Listing) {
-        if let appURL = listing.facebookAppURL, UIApplication.shared.canOpenURL(appURL) {
-            UIApplication.shared.open(appURL) { success in
-                if !success, let web = listing.marketplaceURL {
-                    UIApplication.shared.open(web)
-                }
-            }
-        } else if let web = listing.marketplaceURL {
-            // Universal Links still route to the Facebook app if it's installed.
-            UIApplication.shared.open(web)
-        }
+        guard let web = listing.marketplaceURL else { return }
+        UIApplication.shared.open(web)
     }
 }
 
@@ -371,7 +364,7 @@ struct SnipeSettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { save() }
                 }
-                ToolbarItem(placement: .cancelAction) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
             }
