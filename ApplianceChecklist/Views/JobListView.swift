@@ -20,20 +20,26 @@ struct JobListView: View {
 
     var body: some View {
         NavigationStack {
-            TabView(selection: $selectedTab) {
-                // Tab 1: Upcoming / In Progress
+            // A plain ZStack rather than a paging TabView: switching is driven by the
+            // custom `tabBar` below. A `.page` TabView would hijack horizontal drags to
+            // flip pages, which clobbers in-row swipe actions (Save on listings, delete on
+            // jobs). All three views stay alive — same as the pager — so state is preserved.
+            ZStack {
+                // Tab 0: Upcoming / In Progress
                 upcomingTab
-                    .tag(0)
+                    .opacity(selectedTab == 0 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 0)
 
-                // Tab 2: Completed
+                // Tab 1: Completed
                 completedTab
-                    .tag(1)
+                    .opacity(selectedTab == 1 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 1)
 
-                // Tab 3: Snipe (scraped Marketplace listings)
+                // Tab 2: Snipe (scraped Marketplace listings)
                 SnipeView(showingSettings: $showingSnipeSettings)
-                    .tag(2)
+                    .opacity(selectedTab == 2 ? 1 : 0)
+                    .allowsHitTesting(selectedTab == 2)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
             .overlay(alignment: .bottom) {
                 tabBar
             }
