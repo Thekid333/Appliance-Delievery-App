@@ -9,6 +9,13 @@ struct ApplianceChecklistApp: App {
     @StateObject private var listingsService = ListingsService()
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // Must register before launch completes so iOS can dispatch the background
+        // *processing* task even when it cold-launches us in the background.
+        // (The app-refresh handler is registered by `.backgroundTask(.appRefresh:)` below.)
+        ListingsService.registerProcessingTask()
+    }
+
     var body: some Scene {
         WindowGroup {
             JobListView()

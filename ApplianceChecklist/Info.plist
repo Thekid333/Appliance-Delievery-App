@@ -47,10 +47,12 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>processing</string>
 	</array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.appliancechecklist.snipe.refresh</string>
+		<string>com.appliancechecklist.snipe.processing</string>
 	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>This app needs access to your calendar to create and manage job events, departure times, and prep reminders.</string>

@@ -3,6 +3,7 @@ import CoreLocation
 import SwiftUI
 import UserNotifications
 import BackgroundTasks
+import os
 
 /// Fetches scraped Marketplace listings from the GitHub Gist the PC scraper publishes,
 /// then geocodes each listing's city to rank it by distance/cost from the user's home.
@@ -11,7 +12,15 @@ import BackgroundTasks
 final class ListingsService: ObservableObject {
 
     /// Background App Refresh task id (must match Info.plist BGTaskSchedulerPermittedIdentifiers).
+    /// Short, frequent, best-effort wake-ups.
     static let bgRefreshID = "com.appliancechecklist.snipe.refresh"
+    /// Background *processing* task id — longer time budget, scheduled by the system in
+    /// more favorable windows. Gives distance-based bangers room to geocode. Also in Info.plist.
+    static let bgProcessingID = "com.appliancechecklist.snipe.processing"
+
+    /// Unified log — watch with: `log stream --predicate 'subsystem == "com.appliancechecklist"'`
+    /// or filter for "snipe" in Console.app to confirm background runs actually fire.
+    private static let log = Logger(subsystem: "com.appliancechecklist", category: "snipe")
 
     // MARK: Stored config (UserDefaults)
 
@@ -24,6 +33,9 @@ final class ListingsService: ObservableObject {
     static let alertMaxMilesKey = "snipe.alertMaxMiles"
     static let alertedIDsKey = "snipe.alertedIDs"
     static let alertsSeededKey = "snipe.alertsSeeded"
+    /// Persisted location -> [lat, lon] successes, so cold background launches don't
+    /// start with an empty geocode cache (the in-memory one is wiped each process).
+    static let geoCacheKey = "snipe.geoCache"
 
     @Published var gistID: String {
         didSet { UserDefaults.standard.set(gistID, forKey: Self.gistIDKey) }
@@ -69,6 +81,9 @@ final class ListingsService: ObservableObject {
     private var geocodedHomeFor: String?
     /// Cache: location string -> coordinate (or nil if it failed, to avoid re-querying).
     private var locationCache: [String: CLLocationCoordinate2D?] = [:]
+    /// Disk-backed mirror of *successful* geocodes (location/home address -> [lat, lon]),
+    /// so a fresh background process can compute distances without re-geocoding everything.
+    private var persistedGeo: [String: [Double]] = [:]
     private let geocoder = CLGeocoder()
 
     /// Listing ids we've already alerted on (de-dup) and whether we've established a baseline.
@@ -90,6 +105,13 @@ final class ListingsService: ObservableObject {
         self.alertMaxMiles = d.integer(forKey: Self.alertMaxMilesKey)
         self.alertedIDs = Set(d.stringArray(forKey: Self.alertedIDsKey) ?? [])
         self.hasSeededAlerts = d.bool(forKey: Self.alertsSeededKey)
+        self.persistedGeo = (d.dictionary(forKey: Self.geoCacheKey) as? [String: [Double]]) ?? [:]
+
+        // Warm the in-memory cache from disk so the very first (possibly background)
+        // refresh of this process can already rank by distance.
+        for (location, pair) in persistedGeo where pair.count == 2 {
+            locationCache[location] = .some(CLLocationCoordinate2D(latitude: pair[0], longitude: pair[1]))
+        }
     }
 
     // MARK: - Public API
@@ -107,8 +129,10 @@ final class ListingsService: ObservableObject {
 
     /// Background App Refresh entry point: reschedule, then do a light fetch + alert pass.
     func performBackgroundRefresh() async {
+        Self.log.info("Snipe background task started")
         scheduleBackgroundRefresh()
         await performRefresh(background: true)
+        Self.log.info("Snipe background task finished")
     }
 
     private func performRefresh(background: Bool) async {
@@ -129,6 +153,7 @@ final class ListingsService: ObservableObject {
 
         do {
             let feed = try await fetchFeed()
+            Self.log.info("Snipe refresh fetched \(feed.listings.count) listings (background=\(background))")
             await ensureHomeGeocoded()
             // Show results immediately with whatever distances are already cached…
             ranked = rank(feed.listings)
@@ -136,23 +161,77 @@ final class ListingsService: ObservableObject {
             // Fast alert pass (price/keyword bangers don't need geocoding).
             evaluateAlerts(ranked)
 
-            // Foreground only: fill in missing geocodes (throttled) and re-evaluate for
-            // distance-based bangers. Skipped in the background to respect the time budget.
             if !background {
+                // Foreground: fill in every missing geocode (throttled), then re-evaluate.
                 await geocodeMissing(in: feed.listings)
+                evaluateAlerts(ranked)
+            } else {
+                // Background: geocoding everything would blow the time budget, but a
+                // distance-limited banger can NEVER fire without a distance. So resolve
+                // just the handful of listings that already pass the cheap rules, then
+                // re-rank and re-evaluate. This is what previously forced the user to
+                // reopen the app before distance-based alerts would show up.
+                await geocodeCandidates(in: ranked)
+                ranked = rank(feed.listings)
                 evaluateAlerts(ranked)
             }
         } catch {
             errorMessage = friendlyError(error)
+            Self.log.error("Snipe refresh failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     // MARK: - Background scheduling
 
+    /// Queue both a short app-refresh and a longer processing task. iOS picks whichever
+    /// fits the moment; queuing both maximizes the chance of *some* background run.
     func scheduleBackgroundRefresh() {
+        submitAppRefresh()
+        submitProcessing()
+    }
+
+    private func submitAppRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: Self.bgRefreshID)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)  // ~15 min floor
-        try? BGTaskScheduler.shared.submit(request)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            Self.log.info("Scheduled app-refresh task")
+        } catch {
+            Self.log.error("app-refresh submit failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func submitProcessing() {
+        let request = BGProcessingTaskRequest(identifier: Self.bgProcessingID)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        request.requiresNetworkConnectivity = true   // we always need to hit GitHub
+        request.requiresExternalPower = false        // don't wait for the charger
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            Self.log.info("Scheduled processing task")
+        } catch {
+            Self.log.error("processing submit failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Register the processing-task handler. Must run at launch (App.init) so iOS can
+    /// hand us the task even after a cold background relaunch. The app-refresh handler is
+    /// registered separately by SwiftUI's `.backgroundTask(.appRefresh:)` modifier.
+    ///
+    /// We spin up a fresh `ListingsService` here: all config and de-dup/geo state lives in
+    /// UserDefaults, so a cold instance behaves correctly. An explicit expiration handler
+    /// cancels in-flight work (geocode loops below check `Task.isCancelled`) and reports
+    /// completion so iOS doesn't penalize our future background budget.
+    nonisolated static func registerProcessingTask() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: bgProcessingID, using: nil) { task in
+            let processingTask = task as? BGProcessingTask
+            let work = Task { @MainActor in
+                let service = ListingsService()
+                await service.performBackgroundRefresh()
+                processingTask?.setTaskCompleted(success: true)
+            }
+            processingTask?.expirationHandler = { work.cancel() }
+        }
     }
 
     // MARK: - Networking
@@ -219,9 +298,17 @@ final class ListingsService: ObservableObject {
         let trimmed = homeAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { homeCoordinate = nil; return }
         guard geocodedHomeFor != trimmed else { return }
+        // Reuse a persisted geocode if we have one — saves a lookup (and a failure point)
+        // in the background, where the home address rarely changes between runs.
+        if let pair = persistedGeo[trimmed], pair.count == 2 {
+            homeCoordinate = CLLocationCoordinate2D(latitude: pair[0], longitude: pair[1])
+            geocodedHomeFor = trimmed
+            return
+        }
         if let coord = await geocode(trimmed) {
             homeCoordinate = coord
             geocodedHomeFor = trimmed
+            persistGeo(coord, for: trimmed)
         }
     }
 
@@ -233,13 +320,51 @@ final class ListingsService: ObservableObject {
         guard !unique.isEmpty else { return }
 
         for location in unique.prefix(40) {  // cap per refresh; cached ones are free next time
+            if Task.isCancelled { break }
             let coord = await geocode(location)
-            locationCache[location] = .some(coord)  // store nil-failures too, so we don't retry endlessly
+            cacheCoordinate(coord, for: location)
             // Re-rank incrementally so distances appear as they resolve.
             ranked = rank(listings)
             try? await Task.sleep(nanoseconds: 1_200_000_000)  // ~1.2s between geocodes
         }
         ranked = rank(listings)
+    }
+
+    /// Background-only: geocode just the few listings that already pass the cheap rules
+    /// (keyword/price/freshness) but still lack a distance, so a max-miles banger can fire
+    /// without waiting for the next foreground open. Honors the task's time budget via
+    /// cancellation, and is a no-op when no distance limit is configured.
+    private func geocodeCandidates(in items: [RankedListing]) async {
+        guard alertsEnabled, alertMaxMiles > 0, homeCoordinate != nil else { return }
+        let candidates = items.filter { item in
+            !alertedIDs.contains(item.id)
+                && item.straightLineMiles == nil
+                && passesCheapRules(item.listing)
+                && !item.listing.location.isEmpty
+                && locationCache[item.listing.location] == nil
+        }
+        guard !candidates.isEmpty else { return }
+        Self.log.info("Snipe background geocoding \(candidates.count) candidate location(s)")
+
+        for item in candidates.prefix(15) {
+            if Task.isCancelled { break }
+            let location = item.listing.location
+            let coord = await geocode(location)
+            cacheCoordinate(coord, for: location)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)  // ~1s between geocodes
+        }
+    }
+
+    /// Record a geocode result in memory (including failures, to skip re-querying this
+    /// session) and persist successes so future cold/background launches reuse them.
+    private func cacheCoordinate(_ coord: CLLocationCoordinate2D?, for location: String) {
+        locationCache[location] = .some(coord)
+        if let coord { persistGeo(coord, for: location) }
+    }
+
+    private func persistGeo(_ coord: CLLocationCoordinate2D, for key: String) {
+        persistedGeo[key] = [coord.latitude, coord.longitude]
+        UserDefaults.standard.set(persistedGeo, forKey: Self.geoCacheKey)
     }
 
     private func geocode(_ address: String) async -> CLLocationCoordinate2D? {
@@ -293,10 +418,10 @@ final class ListingsService: ObservableObject {
         if fired { saveAlertState() }
     }
 
-    /// A listing is a "banger" if it's fresh and passes every configured rule.
-    private func isBanger(_ item: RankedListing) -> Bool {
-        let listing = item.listing
-
+    /// The rules that need no geocoding: freshness, keyword relevance, and price.
+    /// Shared by `isBanger` and the background candidate picker so they agree on what's
+    /// worth resolving a distance for.
+    private func passesCheapRules(_ listing: Listing) -> Bool {
         // Freshness backstop: never alert on something listed more than a day ago.
         if let seen = listing.displayDate, Date().timeIntervalSince(seen) > 24 * 3600 {
             return false
@@ -313,6 +438,13 @@ final class ListingsService: ObservableObject {
         if alertMaxPrice > 0 {
             guard let price = listing.priceValue, price <= alertMaxPrice else { return false }
         }
+
+        return true
+    }
+
+    /// A listing is a "banger" if it passes the cheap rules *and* the distance ceiling.
+    private func isBanger(_ item: RankedListing) -> Bool {
+        guard passesCheapRules(item.listing) else { return false }
 
         // Distance ceiling (unknown distance fails when a limit is set; resolves later).
         if alertMaxMiles > 0 {
@@ -341,6 +473,7 @@ final class ListingsService: ObservableObject {
         // trigger: nil delivers immediately.
         let request = UNNotificationRequest(identifier: "banger-\(listing.id)", content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+        Self.log.info("Fired banger notification for listing \(listing.id, privacy: .public)")
     }
 
     /// Treat everything currently in the feed as "already seen" so only listings that
