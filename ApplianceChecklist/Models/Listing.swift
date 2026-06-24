@@ -19,7 +19,7 @@ struct ListingFeed: Decodable {
 
 // MARK: - A single scraped Marketplace listing
 
-struct Listing: Decodable, Identifiable, Hashable {
+struct Listing: Codable, Identifiable, Hashable {
     let id: String
     let title: String
     let price: String

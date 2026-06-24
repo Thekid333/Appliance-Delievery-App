@@ -12,8 +12,10 @@ buy fast without ever checking email.
 
 - **Live feed from a GitHub Gist** — the scraper publishes `listings.json`; the app
   fetches it from anywhere (free, no server). Auto-refreshes + pull-to-refresh.
-- **Ranking built for sniping:** sort by **Newest**, **Closest**, **Cheapest**, or
-  **Best deal** (asking price + round-trip fuel).
+- **Ranking built for sniping:** sort by **Newest**, **Closest**, or **Best deal**
+  (asking price + round-trip fuel).
+- **Save tab 🔖:** swipe any listing to bookmark it; saved posts stick around in the
+  **Saved** tab even after they drop out of the live feed (sold/removed).
 - **Distance & cost from home:** each listing's city is geocoded against your saved home
   address; cost = round-trip miles × **$0.69/mi** (4WD).
 - **One-tap to Facebook:** tapping a listing opens it **directly in the Facebook app** if

@@ -1,21 +1,24 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Sort modes
+// MARK: - Tabs
 
-enum SnipeSort: String, CaseIterable, Identifiable {
+/// The Snipe segmented control: three sort modes over the live feed, plus a Saved
+/// view of bookmarked listings. ("Cheapest" was dropped — "Best deal" already ranks
+/// by price + round-trip fuel, so it was effectively a condensed version of it.)
+enum SnipeTab: String, CaseIterable, Identifiable {
     case newest = "Newest"
     case closest = "Closest"
-    case cheapest = "Cheapest"
     case bestDeal = "Best deal"
+    case bookmarks = "Saved"
 
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .newest: return "clock.badge"
         case .closest: return "location.fill"
-        case .cheapest: return "dollarsign.circle"
         case .bestDeal: return "star.fill"
+        case .bookmarks: return "bookmark.fill"
         }
     }
 }
@@ -26,26 +29,27 @@ struct SnipeView: View {
     @EnvironmentObject private var listingsService: ListingsService
     @EnvironmentObject private var driveTimeService: DriveTimeService
 
-    @State private var sort: SnipeSort = .newest
+    @State private var tab: SnipeTab = .newest
     @State private var searchText = ""
     @Binding var showingSettings: Bool
 
     private var visibleListings: [RankedListing] {
-        var items = listingsService.ranked
+        // The Saved tab reads bookmarks (already newest-saved first); the rest sort the feed.
+        var items = tab == .bookmarks ? listingsService.bookmarked : listingsService.ranked
 
         if !searchText.isEmpty {
             items = items.filter { $0.listing.title.localizedCaseInsensitiveContains(searchText) }
         }
 
-        switch sort {
+        switch tab {
         case .newest:
             items.sort { ($0.listing.displayDate ?? .distantPast) > ($1.listing.displayDate ?? .distantPast) }
         case .closest:
             items.sort { sortAscending($0.straightLineMiles, $1.straightLineMiles) }
-        case .cheapest:
-            items.sort { sortAscending($0.listing.priceValue.map(Double.init), $1.listing.priceValue.map(Double.init)) }
         case .bestDeal:
             items.sort { sortAscending($0.totalAcquisitionCost, $1.totalAcquisitionCost) }
+        case .bookmarks:
+            break  // keep most-recently-saved order
         }
         return items
     }
@@ -64,7 +68,13 @@ struct SnipeView: View {
         VStack(spacing: 0) {
             sortBar
 
-            if listingsService.ranked.isEmpty {
+            if tab == .bookmarks {
+                if listingsService.bookmarkedListings.isEmpty {
+                    bookmarksEmptyState
+                } else {
+                    listingsList
+                }
+            } else if listingsService.ranked.isEmpty {
                 emptyState
             } else {
                 listingsList
@@ -98,8 +108,8 @@ struct SnipeView: View {
             .padding(8)
             .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
-            Picker("Sort", selection: $sort) {
-                ForEach(SnipeSort.allCases) { mode in
+            Picker("View", selection: $tab) {
+                ForEach(SnipeTab.allCases) { mode in
                     Text(mode.rawValue).tag(mode)
                 }
             }
@@ -113,7 +123,7 @@ struct SnipeView: View {
                     ProgressView().scaleEffect(0.7)
                 }
                 Spacer()
-                Text("\(visibleListings.count) listings")
+                Text("\(visibleListings.count) \(tab == .bookmarks ? "saved" : "listings")")
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -131,10 +141,20 @@ struct SnipeView: View {
                 Button {
                     openInFacebook(item.listing)
                 } label: {
-                    ListingRowView(item: item)
+                    ListingRowView(item: item, isSaved: listingsService.isBookmarked(item.listing.id))
                 }
                 .buttonStyle(.plain)
                 .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    let saved = listingsService.isBookmarked(item.listing.id)
+                    Button {
+                        withAnimation { listingsService.toggleBookmark(item.listing) }
+                    } label: {
+                        Label(saved ? "Remove" : "Save",
+                              systemImage: saved ? "bookmark.slash.fill" : "bookmark.fill")
+                    }
+                    .tint(saved ? .red : .blue)
+                }
             }
 
             // Footer spacer so the last row clears the floating tab bar.
@@ -179,6 +199,24 @@ struct SnipeView: View {
         .refreshable { await refreshNow() }
     }
 
+    private var bookmarksEmptyState: some View {
+        VStack(spacing: 16) {
+            Spacer(minLength: 60)
+            Image(systemName: "bookmark")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("No saved listings")
+                .font(.title3.bold())
+            Text("Swipe left on any listing and tap **Save** to keep it here — saved posts stay even after they leave the feed.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: Actions
 
     private func refreshNow() async {
@@ -206,6 +244,7 @@ struct SnipeView: View {
 
 struct ListingRowView: View {
     let item: RankedListing
+    var isSaved: Bool = false
     private var listing: Listing { item.listing }
 
     var body: some View {
@@ -223,6 +262,11 @@ struct ListingRowView: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5).padding(.vertical, 2)
                             .background(.red, in: Capsule())
+                    }
+                    if isSaved {
+                        Image(systemName: "bookmark.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.blue)
                     }
                     Spacer()
                     Text(listing.timeAgo)

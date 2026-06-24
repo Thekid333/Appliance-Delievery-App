@@ -36,6 +36,9 @@ final class ListingsService: ObservableObject {
     /// Persisted location -> [lat, lon] successes, so cold background launches don't
     /// start with an empty geocode cache (the in-memory one is wiped each process).
     static let geoCacheKey = "snipe.geoCache"
+    /// Full snapshots of the user's saved listings (JSON), so bookmarks survive even
+    /// after a listing drops out of the live feed (sold/removed).
+    static let bookmarksKey = "snipe.bookmarks"
 
     @Published var gistID: String {
         didSet { UserDefaults.standard.set(gistID, forKey: Self.gistIDKey) }
@@ -74,6 +77,10 @@ final class ListingsService: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published var errorMessage: String?
 
+    /// Listings the user has saved, most-recently-saved first. Snapshots, not just ids,
+    /// so they remain viewable after they leave the live feed.
+    @Published private(set) var bookmarkedListings: [Listing] = []
+
     // MARK: Internals
 
     private var homeAddress: String = ""
@@ -107,6 +114,11 @@ final class ListingsService: ObservableObject {
         self.hasSeededAlerts = d.bool(forKey: Self.alertsSeededKey)
         self.persistedGeo = (d.dictionary(forKey: Self.geoCacheKey) as? [String: [Double]]) ?? [:]
 
+        if let data = d.data(forKey: Self.bookmarksKey),
+           let saved = try? JSONDecoder().decode([Listing].self, from: data) {
+            self.bookmarkedListings = saved
+        }
+
         // Warm the in-memory cache from disk so the very first (possibly background)
         // refresh of this process can already rank by distance.
         for (location, pair) in persistedGeo where pair.count == 2 {
@@ -133,6 +145,36 @@ final class ListingsService: ObservableObject {
         scheduleBackgroundRefresh()
         await performRefresh(background: true)
         Self.log.info("Snipe background task finished")
+    }
+
+    // MARK: - Bookmarks
+
+    /// Saved listings decorated with current distance/cost (recomputed from the live
+    /// geocode cache + home), preserving most-recently-saved order.
+    var bookmarked: [RankedListing] { rank(bookmarkedListings) }
+
+    func isBookmarked(_ id: String) -> Bool {
+        bookmarkedListings.contains { $0.id == id }
+    }
+
+    /// Save the listing if it isn't saved, otherwise remove it.
+    func toggleBookmark(_ listing: Listing) {
+        if let idx = bookmarkedListings.firstIndex(where: { $0.id == listing.id }) {
+            bookmarkedListings.remove(at: idx)
+        } else {
+            bookmarkedListings.insert(listing, at: 0)  // most-recent first
+        }
+        saveBookmarks()
+    }
+
+    func removeBookmark(_ id: String) {
+        bookmarkedListings.removeAll { $0.id == id }
+        saveBookmarks()
+    }
+
+    private func saveBookmarks() {
+        guard let data = try? JSONEncoder().encode(bookmarkedListings) else { return }
+        UserDefaults.standard.set(data, forKey: Self.bookmarksKey)
     }
 
     private func performRefresh(background: Bool) async {
