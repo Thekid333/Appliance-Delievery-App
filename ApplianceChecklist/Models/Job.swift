@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 // MARK: - Job Type
 
@@ -17,6 +18,15 @@ enum JobType: String, Codable, CaseIterable, Identifiable {
         case .pickup: return "shippingbox.fill"
         }
     }
+
+    /// Accent color used for this job type across the UI.
+    var color: Color {
+        switch self {
+        case .delivery: return .blue
+        case .installation: return .orange
+        case .pickup: return .green
+        }
+    }
 }
 
 // MARK: - Job Status
@@ -25,14 +35,6 @@ enum JobStatus: String {
     case upcoming = "Upcoming"
     case inProgress = "In Progress"
     case completed = "Completed"
-
-    var icon: String {
-        switch self {
-        case .upcoming: return "clock"
-        case .inProgress: return "figure.walk"
-        case .completed: return "checkmark.circle.fill"
-        }
-    }
 }
 
 // MARK: - Job Model
@@ -105,21 +107,24 @@ final class Job {
         return .upcoming
     }
 
-    /// Whether the job is in the past (completed or past return time).
-    var isPast: Bool {
-        status == .completed
-    }
-
     /// Mark this job as finished (manually).
     func markCompleted() {
         isCompleted = true
         completedDate = Date()
     }
 
-    // MARK: - Timing Calculations
+    // MARK: - Timing Formulas
+    //
+    // Static so AddEditJobView can preview times for a job that doesn't exist
+    // yet using the exact same math the saved model uses.
 
     /// Total job duration in minutes (from leaving home to returning).
-    var estimatedDurationMinutes: Int {
+    static func durationMinutes(
+        type: JobType,
+        driveTimeMinutes: Int,
+        numberOfPeople: Int,
+        includesInstallation: Bool
+    ) -> Int {
         switch type {
         case .delivery:
             let base = (2 * driveTimeMinutes) + (30 / max(1, numberOfPeople))
@@ -131,17 +136,17 @@ final class Job {
         }
     }
 
-    /// Human-readable duration (e.g. "1h 30m" instead of "90 min").
-    var formattedDuration: String {
-        let hours = estimatedDurationMinutes / 60
-        let mins = estimatedDurationMinutes % 60
-        if hours > 0 && mins > 0 { return "\(hours)h \(mins)m" }
-        if hours > 0 { return "\(hours)h" }
-        return "\(mins)m"
+    /// Minutes of prep time before departure for a job type.
+    static func prepMinutes(for type: JobType) -> Int {
+        switch type {
+        case .delivery: return 60
+        case .installation: return 30
+        case .pickup: return 45
+        }
     }
 
-    /// Format drive time as "1h 30m" or "45m".
-    static func formatDriveTime(_ minutes: Int) -> String {
+    /// Format a minute count as "1h 30m", "1h", or "45m".
+    static func formatMinutes(_ minutes: Int) -> String {
         let h = minutes / 60
         let m = minutes % 60
         if h > 0 && m > 0 { return "\(h)h \(m)m" }
@@ -149,13 +154,26 @@ final class Job {
         return "\(m)m"
     }
 
+    // MARK: - Timing Calculations
+
+    /// Total job duration in minutes (from leaving home to returning).
+    var estimatedDurationMinutes: Int {
+        Self.durationMinutes(
+            type: type,
+            driveTimeMinutes: driveTimeMinutes,
+            numberOfPeople: numberOfPeople,
+            includesInstallation: includesInstallation
+        )
+    }
+
+    /// Human-readable duration (e.g. "1h 30m" instead of "90 min").
+    var formattedDuration: String {
+        Self.formatMinutes(estimatedDurationMinutes)
+    }
+
     /// Minutes of prep time before departure.
     var prepTimeMinutes: Int {
-        switch type {
-        case .delivery: return 60
-        case .installation: return 30
-        case .pickup: return 45
-        }
+        Self.prepMinutes(for: type)
     }
 
     /// When to start prepping (prep window before departure).
@@ -189,15 +207,17 @@ final class Job {
         return Calendar.current.date(byAdding: .day, value: 30, to: completed)
     }
 
+    /// Whole days until the warranty expires, rounding a partial day up — so a
+    /// warranty expiring later today reads "1 day left", not "expired".
     var warrantyDaysRemaining: Int? {
         guard let expiry = warrantyExpirationDate else { return nil }
-        let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
-        return max(0, days)
+        let remaining = expiry.timeIntervalSince(Date())
+        return max(0, Int(ceil(remaining / 86_400)))
     }
 
     var isWarrantyExpired: Bool {
-        guard let remaining = warrantyDaysRemaining else { return false }
-        return remaining <= 0
+        guard let expiry = warrantyExpirationDate else { return false }
+        return Date() >= expiry
     }
 
     // MARK: - Checklist Helpers

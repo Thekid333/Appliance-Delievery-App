@@ -91,16 +91,16 @@ struct JobDetailView: View {
             HStack(spacing: 12) {
                 Image(systemName: job.type.icon)
                     .font(.largeTitle)
-                    .foregroundStyle(colorForType(job.type))
+                    .foregroundStyle(job.type.color)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(job.type.rawValue)
                             .font(.caption.bold())
-                            .foregroundStyle(colorForType(job.type))
+                            .foregroundStyle(job.type.color)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
-                            .background(colorForType(job.type).opacity(0.12))
+                            .background(job.type.color.opacity(0.12))
                             .clipShape(Capsule())
 
                         // Status badge
@@ -146,7 +146,7 @@ struct JobDetailView: View {
                 Spacer()
                 statBadge(
                     icon: "car",
-                    value: Job.formatDriveTime(job.driveTimeMinutes),
+                    value: Job.formatMinutes(job.driveTimeMinutes),
                     label: "Drive"
                 )
                 Spacer()
@@ -271,7 +271,7 @@ struct JobDetailView: View {
                 color: .red,
                 title: "Depart",
                 time: job.departureTime,
-                subtitle: "\(Job.formatDriveTime(job.driveTimeMinutes)) drive"
+                subtitle: "\(Job.formatMinutes(job.driveTimeMinutes)) drive"
             )
 
             timelineConnector()
@@ -404,13 +404,6 @@ struct JobDetailView: View {
             .padding(.leading, 13)
     }
 
-    private func colorForType(_ type: JobType) -> Color {
-        switch type {
-        case .delivery: return .blue
-        case .installation: return .orange
-        case .pickup: return .green
-        }
-    }
 }
 
 #Preview {

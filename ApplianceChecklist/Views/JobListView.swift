@@ -10,10 +10,6 @@ struct JobListView: View {
     @State private var showingSnipeSettings = false
     @State private var selectedTab = 0
 
-    private var upcomingAndInProgressJobs: [Job] {
-        jobs.filter { $0.status == .upcoming || $0.status == .inProgress }
-    }
-
     private var completedJobs: [Job] {
         jobs.filter { $0.status == .completed }
     }
@@ -131,7 +127,7 @@ struct JobListView: View {
 
     private var upcomingTab: some View {
         Group {
-            if upcomingAndInProgressJobs.isEmpty {
+            if upcomingJobs.isEmpty && inProgressJobs.isEmpty {
                 ContentUnavailableView {
                     Label("No Upcoming Jobs", systemImage: "clock")
                 } description: {
@@ -264,9 +260,9 @@ struct JobRowView: View {
         HStack(spacing: 12) {
             Image(systemName: job.type.icon)
                 .font(.title2)
-                .foregroundStyle(colorForType(job.type))
+                .foregroundStyle(job.type.color)
                 .frame(width: 40, height: 40)
-                .background(colorForType(job.type).opacity(0.12))
+                .background(job.type.color.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 4) {
@@ -317,22 +313,12 @@ struct JobRowView: View {
 
             Spacer()
 
-            VStack {
-                Text(job.formattedDuration)
-                    .font(.subheadline.bold())
-            }
-            .frame(width: 54)
+            Text(job.formattedDuration)
+                .font(.subheadline.bold())
+                .frame(width: 54)
         }
         .padding(.vertical, 4)
         .opacity(job.status == .completed ? 0.7 : 1.0)
-    }
-
-    private func colorForType(_ type: JobType) -> Color {
-        switch type {
-        case .delivery: return .blue
-        case .installation: return .orange
-        case .pickup: return .green
-        }
     }
 }
 

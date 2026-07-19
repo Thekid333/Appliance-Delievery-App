@@ -8,26 +8,14 @@ class CalendarService: ObservableObject {
     private let store = EKEventStore()
 
     @Published var authorizationStatus: EKAuthorizationStatus = .notDetermined
-    @Published var lastError: String?
-
-    func refreshAuthorizationStatus() {
-        authorizationStatus = EKEventStore.authorizationStatus(for: .event)
-    }
 
     // MARK: - Authorization
 
     /// Request full calendar access. Returns true if granted.
     func requestAccess() async -> Bool {
-        do {
-            let granted = try await store.requestFullAccessToEvents()
-            authorizationStatus = EKEventStore.authorizationStatus(for: .event)
-            lastError = nil
-            return granted
-        } catch {
-            lastError = error.localizedDescription
-            authorizationStatus = EKEventStore.authorizationStatus(for: .event)
-            return false
-        }
+        let granted = (try? await store.requestFullAccessToEvents()) ?? false
+        authorizationStatus = EKEventStore.authorizationStatus(for: .event)
+        return granted
     }
 
     var hasAccess: Bool {
@@ -80,10 +68,8 @@ class CalendarService: ObservableObject {
 
         do {
             try store.save(event, span: .thisEvent)
-            lastError = nil
             return event.eventIdentifier
         } catch {
-            lastError = "Failed to save event: \(error.localizedDescription)"
             return nil
         }
     }
@@ -92,11 +78,6 @@ class CalendarService: ObservableObject {
     func removeEvent(identifier: String?) {
         guard let identifier,
               let event = store.event(withIdentifier: identifier) else { return }
-        do {
-            try store.remove(event, span: .thisEvent)
-            lastError = nil
-        } catch {
-            lastError = "Failed to remove event: \(error.localizedDescription)"
-        }
+        try? store.remove(event, span: .thisEvent)
     }
 }

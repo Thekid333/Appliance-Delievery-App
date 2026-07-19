@@ -8,9 +8,6 @@ import UIKit
 @MainActor
 class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
 
-    @Published var isAuthorized = false
-    @Published var lastError: String?
-
     override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
@@ -41,31 +38,18 @@ class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterD
     // MARK: - Authorization
 
     func requestAuthorization() async {
-        do {
-            let granted = try await UNUserNotificationCenter.current()
-                .requestAuthorization(options: [.alert, .badge, .sound])
-            isAuthorized = granted
-            lastError = nil
-        } catch {
-            lastError = error.localizedDescription
-            isAuthorized = false
-        }
-    }
-
-    func checkAuthorizationStatus() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        isAuthorized = settings.authorizationStatus == .authorized
+        _ = try? await UNUserNotificationCenter.current()
+            .requestAuthorization(options: [.alert, .badge, .sound])
     }
 
     // MARK: - Schedule Notifications
 
-    /// Schedules all notifications for the given job.
+    /// Schedules all notifications for the given job. Each reminder is scheduled
+    /// independently — `calendarTrigger` skips any that are already in the past,
+    /// so a job added mid-prep still gets its departure and post-tinkering alerts.
     func scheduleNotifications(for job: Job) {
         // Remove any existing notifications for this job first
         removeNotifications(for: job)
-
-        // Only schedule for future events
-        guard job.prepStartTime > Date() else { return }
 
         schedulePrepReminder(for: job)
         scheduleDepartureReminder(for: job)
@@ -114,7 +98,7 @@ class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterD
     private func scheduleDepartureReminder(for job: Job) {
         let content = UNMutableNotificationContent()
         content.title = "Time to leave — head out now!"
-        content.body = "\(job.title) — \(locationDescription(for: job)). Drive time: \(Job.formatDriveTime(job.driveTimeMinutes))."
+        content.body = "\(job.title) — \(locationDescription(for: job)). Drive time: \(Job.formatMinutes(job.driveTimeMinutes))."
         content.sound = .default
         content.categoryIdentifier = "JOB_DEPART"
 

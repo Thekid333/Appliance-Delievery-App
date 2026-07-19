@@ -152,7 +152,7 @@ struct AddEditJobView: View {
             HStack {
                 if isDriveTimeEditable {
                     Stepper(
-                        "Drive Time: \(Job.formatDriveTime(driveTimeMinutes))",
+                        "Drive Time: \(Job.formatMinutes(driveTimeMinutes))",
                         value: $driveTimeMinutes,
                         in: 5...180,
                         step: 5
@@ -164,7 +164,7 @@ struct AddEditJobView: View {
                                 ProgressView()
                                     .scaleEffect(0.8)
                             }
-                            Text(Job.formatDriveTime(driveTimeMinutes))
+                            Text(Job.formatMinutes(driveTimeMinutes))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -217,41 +217,28 @@ struct AddEditJobView: View {
     }
 
     // MARK: - Calculated Times Helpers
+    // All previews use the same formulas as the Job model (Job's static helpers),
+    // so what the form shows is exactly what the saved job will compute.
 
     private var calculatedDepartureTime: Date {
         scheduledDate.addingTimeInterval(Double(-driveTimeMinutes * 60))
     }
 
-    private var calculatedPrepMinutes: Int {
-        jobType == .delivery ? 60 : (jobType == .pickup ? 45 : 30)
-    }
-
     private var calculatedPrepTime: Date {
-        calculatedDepartureTime.addingTimeInterval(Double(-calculatedPrepMinutes * 60))
+        calculatedDepartureTime.addingTimeInterval(Double(-Job.prepMinutes(for: jobType) * 60))
     }
 
     private var calculatedTotalDuration: Int {
-        switch jobType {
-        case .delivery:
-            let base = (2 * driveTimeMinutes) + (30 / max(1, numberOfPeople))
-            return includesInstallation ? base + 30 : base
-        case .installation:
-            return (2 * driveTimeMinutes) + 30
-        case .pickup:
-            return (2 * driveTimeMinutes) + (30 / max(1, numberOfPeople))
-        }
+        Job.durationMinutes(
+            type: jobType,
+            driveTimeMinutes: driveTimeMinutes,
+            numberOfPeople: numberOfPeople,
+            includesInstallation: includesInstallation
+        )
     }
 
     private var calculatedReturnTime: Date {
         calculatedDepartureTime.addingTimeInterval(Double(calculatedTotalDuration * 60))
-    }
-
-    private var formattedCalculatedDuration: String {
-        let hours = calculatedTotalDuration / 60
-        let mins = calculatedTotalDuration % 60
-        if hours > 0 && mins > 0 { return "\(hours)h \(mins)m" }
-        if hours > 0 { return "\(hours)h" }
-        return "\(mins)m"
     }
 
     private var calculatedTimesSection: some View {
@@ -279,7 +266,7 @@ struct AddEditJobView: View {
             }
 
             LabeledContent("Total Duration") {
-                Text(formattedCalculatedDuration)
+                Text(Job.formatMinutes(calculatedTotalDuration))
                     .foregroundStyle(.secondary)
             }
         }
@@ -296,30 +283,22 @@ struct AddEditJobView: View {
         isSaving = true
         defer { isSaving = false }
 
-        let savedAddress = effectiveAddress
-
-        if let job = existingJob {
+        let job: Job
+        if let existing = existingJob {
+            job = existing
             job.type = jobType
             job.title = title
-            job.address = savedAddress
+            job.address = effectiveAddress
             job.scheduledDate = scheduledDate
             job.driveTimeMinutes = driveTimeMinutes
             job.numberOfPeople = max(1, numberOfPeople)
             job.includesInstallation = includesInstallation
             job.isPostTinkering = isPostTinkering
-
-            // Update calendar event
-            if let eventId = await calendarService.addOrUpdateEvent(for: job) {
-                job.calendarEventIdentifier = eventId
-            }
-
-            // Reschedule notifications
-            notificationService.scheduleNotifications(for: job)
         } else {
-            let job = Job(
+            job = Job(
                 type: jobType,
                 title: title,
-                address: savedAddress,
+                address: effectiveAddress,
                 scheduledDate: scheduledDate,
                 driveTimeMinutes: driveTimeMinutes,
                 numberOfPeople: numberOfPeople,
@@ -327,15 +306,13 @@ struct AddEditJobView: View {
                 isPostTinkering: isPostTinkering
             )
             modelContext.insert(job)
-
-            // Add to calendar
-            if let eventId = await calendarService.addOrUpdateEvent(for: job) {
-                job.calendarEventIdentifier = eventId
-            }
-
-            // Schedule notifications
-            notificationService.scheduleNotifications(for: job)
         }
+
+        // Create/update the calendar event and (re)schedule reminders.
+        if let eventId = await calendarService.addOrUpdateEvent(for: job) {
+            job.calendarEventIdentifier = eventId
+        }
+        notificationService.scheduleNotifications(for: job)
 
         dismiss()
     }

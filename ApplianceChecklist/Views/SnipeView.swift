@@ -81,7 +81,10 @@ struct SnipeView: View {
             }
         }
         .task {
-            // Initial load + auto-refresh loop while this tab is on screen.
+            // Initial load + auto-refresh loop. JobListView keeps this view alive
+            // (hidden) on the other tabs, so the loop runs the whole time the app
+            // is foregrounded — that's what lets banger alerts fire while you're
+            // on the Upcoming/Completed tabs.
             await refreshNow()
             await autoRefreshLoop()
         }
