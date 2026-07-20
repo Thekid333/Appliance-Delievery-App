@@ -446,5 +446,9 @@ struct SnipeSettingsView: View {
             listingsService.rebaselineAlerts()
         }
         dismiss()
+
+        // Apply the new settings immediately (new Gist ID / home address) instead
+        // of waiting for the next auto-refresh tick.
+        Task { await listingsService.refresh(homeAddress: driveTimeService.homeAddress) }
     }
 }

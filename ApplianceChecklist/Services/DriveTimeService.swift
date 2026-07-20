@@ -39,8 +39,8 @@ class DriveTimeService: ObservableObject {
 
             guard let originPlacemark = originPlacemarks.first,
                   let destPlacemark = destPlacemarks.first,
-                  let originLocation = originPlacemark.location,
-                  let destLocation = destPlacemark.location else {
+                  originPlacemark.location != nil,
+                  destPlacemark.location != nil else {
                 lastError = "Could not find location for one or both addresses"
                 return nil
             }

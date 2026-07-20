@@ -133,14 +133,11 @@ struct RankedListing: Identifiable, Hashable {
     }
 
     /// All-in cost = asking price + round-trip fuel. Used for the "Best deal" sort.
+    /// Unknown price returns nil (sorts to the bottom) — a "See Listing" price is
+    /// not a deal, even if the fuel cost alone looks tiny.
     var totalAcquisitionCost: Double? {
-        let price = listing.priceValue.map(Double.init)
-        switch (price, roundTripCost) {
-        case let (p?, c?): return p + c
-        case let (p?, nil): return p
-        case let (nil, c?): return c
-        default: return nil
-        }
+        guard let price = listing.priceValue.map(Double.init) else { return nil }
+        return price + (roundTripCost ?? 0)
     }
 
     var distanceLabel: String? {

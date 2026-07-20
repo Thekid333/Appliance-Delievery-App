@@ -13,10 +13,11 @@ final class ListingsService: ObservableObject {
 
     /// Background App Refresh task id (must match Info.plist BGTaskSchedulerPermittedIdentifiers).
     /// Short, frequent, best-effort wake-ups.
-    static let bgRefreshID = "com.appliancechecklist.snipe.refresh"
+    nonisolated static let bgRefreshID = "com.appliancechecklist.snipe.refresh"
     /// Background *processing* task id — longer time budget, scheduled by the system in
     /// more favorable windows. Gives distance-based bangers room to geocode. Also in Info.plist.
-    static let bgProcessingID = "com.appliancechecklist.snipe.processing"
+    /// (nonisolated: referenced from the nonisolated task-registration path at launch.)
+    nonisolated static let bgProcessingID = "com.appliancechecklist.snipe.processing"
 
     /// Unified log — watch with: `log stream --predicate 'subsystem == "com.appliancechecklist"'`
     /// or filter for "snipe" in Console.app to confirm background runs actually fire.
@@ -41,7 +42,12 @@ final class ListingsService: ObservableObject {
     static let bookmarksKey = "snipe.bookmarks"
 
     @Published var gistID: String {
-        didSet { UserDefaults.standard.set(gistID, forKey: Self.gistIDKey) }
+        didSet {
+            UserDefaults.standard.set(gistID, forKey: Self.gistIDKey)
+            // A different gist is a different resource — drop the ETag cache.
+            lastETag = nil
+            lastFeedListings = nil
+        }
     }
     /// Optional personal access token — raises the GitHub API rate limit. Not required.
     @Published var githubToken: String {
@@ -96,6 +102,15 @@ final class ListingsService: ObservableObject {
     /// Listing ids we've already alerted on (de-dup) and whether we've established a baseline.
     private var alertedIDs: Set<String>
     private var hasSeededAlerts: Bool
+
+    /// Last successful fetch's ETag + decoded listings, kept in memory only.
+    /// The auto-refresh loop polls every ~2 min but the scraper publishes less
+    /// often, so most polls can be conditional GETs — GitHub answers 304 with
+    /// no body, and 304s don't count against the rate limit. Process-local on
+    /// purpose: a cold background launch has no cached feed, sends no ETag,
+    /// and gets a full 200 — so alerts never depend on this cache.
+    private var lastETag: String?
+    private var lastFeedListings: [Listing]?
 
     var isConfigured: Bool { !gistID.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -291,11 +306,22 @@ final class ListingsService: ObservableObject {
         if !token.isEmpty {
             request.setValue("token \(token)", forHTTPHeaderField: "Authorization")
         }
+        if let etag = lastETag, lastFeedListings != nil {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
+        var etag: String?
         if let http = response as? HTTPURLResponse {
             switch http.statusCode {
-            case 200: break
+            case 200:
+                etag = http.value(forHTTPHeaderField: "ETag")
+            case 304:
+                // Feed unchanged since last fetch — reuse it (rate-limit-free).
+                if let cached = lastFeedListings {
+                    return ListingFeed(generatedAt: nil, count: cached.count, listings: cached)
+                }
+                throw ListingsError.emptyFeed  // unreachable: ETag only sent alongside a cached feed
             case 404: throw ListingsError.notFound
             case 403: throw ListingsError.rateLimited
             default: throw ListingsError.http(http.statusCode)
@@ -317,7 +343,10 @@ final class ListingsService: ObservableObject {
         } else {
             throw ListingsError.emptyFeed
         }
-        return try JSONDecoder().decode(ListingFeed.self, from: feedData)
+        let feed = try JSONDecoder().decode(ListingFeed.self, from: feedData)
+        lastETag = etag
+        lastFeedListings = feed.listings
+        return feed
     }
 
     // MARK: - Ranking & geocoding
@@ -457,6 +486,15 @@ final class ListingsService: ObservableObject {
             // Items that fail are intentionally NOT marked seen — a later refresh may
             // resolve their distance and qualify them.
         }
+
+        // Keep the de-dup set from growing in UserDefaults forever. Ids absent
+        // from the feed were pruned by the scraper's 7-day retention and can't
+        // return unless genuinely relisted — in which case re-alerting is right.
+        if alertedIDs.count > 1000 {
+            alertedIDs.formIntersection(ids)
+            fired = true  // force a save of the shrunken set
+        }
+
         if fired { saveAlertState() }
     }
 

@@ -135,8 +135,10 @@ class NotificationService: NSObject, ObservableObject, UNUserNotificationCenterD
 
     private func calendarTrigger(for date: Date) -> UNCalendarNotificationTrigger? {
         guard date > Date() else { return nil }
+        // Include seconds: without them a date less than a minute away rounds
+        // down to a minute boundary that's already past and never fires.
         let components = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute],
+            [.year, .month, .day, .hour, .minute, .second],
             from: date
         )
         return UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
